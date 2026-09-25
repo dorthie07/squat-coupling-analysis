@@ -9,205 +9,247 @@ import matplotlib.pyplot as plt
 # ---------------------------------------------------------
 
 st.set_page_config(
-    page_title="Squat Coupling Analysis",
+    page_title="Squat Physiological Coupling Analysis",
+    page_icon="📊",
     layout="wide"
 )
 
 st.title("Squat Physiological Coupling Analysis")
 
 st.write(
-    """
-    This program analyzes synchronized 1-second physiological data
-    collected during a squat protocol. It uses 6-second windows with
-    3-second overlap, following the time-window approach described
-    by Garcia-Retortillo et al.
-    """
+    "This program analyzes synchronized 1-second physiological data "
+    "collected during a squat protocol. It uses 6-second windows with "
+    "3-second overlap, following the time-window approach described by "
+    "Garcia-Retortillo et al."
 )
 
+st.divider()
+
 
 # ---------------------------------------------------------
-# UPLOAD DATA
+# STEP 1 — UPLOAD DATA
 # ---------------------------------------------------------
+
+st.header("Step 1 — Upload data")
 
 uploaded_file = st.file_uploader(
     "Upload your Excel file",
     type=["xlsx", "xls"]
 )
 
-if uploaded_file is not None:
+if uploaded_file is None:
+    st.info("Upload an Excel file to begin the analysis.")
+    st.stop()
 
-    # Read Excel file
-    df = pd.read_excel(uploaded_file)
+try:
+    data = pd.read_excel(uploaded_file)
+except Exception as e:
+    st.error(f"Could not read the Excel file: {e}")
+    st.stop()
 
-    st.subheader("Uploaded data")
+st.success("Excel file uploaded successfully.")
 
-    st.write(
-        f"Your file contains **{len(df)} rows** and "
-        f"**{len(df.columns)} columns**."
-    )
+col1, col2 = st.columns(2)
 
-    st.dataframe(df.head(10))
+with col1:
+    st.metric("Rows", len(data))
+
+with col2:
+    st.metric("Columns", len(data.columns))
+
+with st.expander("Preview uploaded data"):
+    st.dataframe(data.head(10), use_container_width=True)
 
 
-    # -----------------------------------------------------
-    # COLUMN SELECTION
-    # -----------------------------------------------------
+# ---------------------------------------------------------
+# STEP 2 — SELECT COLUMNS
+# ---------------------------------------------------------
 
-    st.subheader("Select your columns")
+st.divider()
+st.header("Step 2 — Select columns")
 
-    st.write(
-        "Select the columns containing your synchronized "
-        "1-second physiological measurements."
-    )
+st.write(
+    "Select the columns containing your synchronized 1-second "
+    "physiological measurements."
+)
 
-    columns = list(df.columns)
+columns = list(data.columns)
 
-    time_column = st.selectbox(
-        "Time column",
-        columns
-    )
+col1, col2 = st.columns(2)
 
-    hr_column = st.selectbox(
+with col1:
+    time_col = st.selectbox("Time column", columns)
+
+    hr_col = st.selectbox(
         "Heart rate (HR) column",
         columns
     )
 
-    rr_column = st.selectbox(
+    rr_col = st.selectbox(
         "Respiratory rate (RR) column",
         columns
     )
 
-    smo2_column = st.selectbox(
+with col2:
+    smo2_col = st.selectbox(
         "Muscle oxygen saturation (SmO₂) column",
         columns
     )
 
-    thb_column = st.selectbox(
+    thb_col = st.selectbox(
         "Total hemoglobin (THb) column",
         columns
     )
 
 
-    # -----------------------------------------------------
-    # PREPARE DATA
-    # -----------------------------------------------------
+# ---------------------------------------------------------
+# DATA PREPARATION
+# ---------------------------------------------------------
 
-    analysis_df = df[
-        [
-            time_column,
-            hr_column,
-            rr_column,
-            smo2_column,
-            thb_column
-        ]
-    ].copy()
+analysis_data = data[
+    [time_col, hr_col, rr_col, smo2_col, thb_col]
+].copy()
 
-    analysis_df.columns = [
-        "Time",
-        "HR",
-        "RR",
-        "SmO2",
-        "THb"
-    ]
+analysis_data.columns = [
+    "Time",
+    "HR",
+    "RR",
+    "SmO2",
+    "THb"
+]
 
-    # Convert measurements to numbers
-    for column in ["Time", "HR", "RR", "SmO2", "THb"]:
-        analysis_df[column] = pd.to_numeric(
-            analysis_df[column],
-            errors="coerce"
-        )
-
-    # Remove rows with missing values
-    analysis_df = analysis_df.dropna().reset_index(drop=True)
-
-
-    # -----------------------------------------------------
-    # DATA CHECK
-    # -----------------------------------------------------
-
-    st.subheader("Data check")
-
-    st.write(
-        f"**Usable rows after removing missing values:** "
-        f"{len(analysis_df)}"
+for column in analysis_data.columns:
+    analysis_data[column] = pd.to_numeric(
+        analysis_data[column],
+        errors="coerce"
     )
 
-    if len(analysis_df) < 6:
-        st.error(
-            "There are not enough data points to perform the "
-            "6-second window analysis."
-        )
-        st.stop()
+total_rows = len(analysis_data)
+
+analysis_data = analysis_data.dropna()
+
+usable_rows = len(analysis_data)
+missing_rows = total_rows - usable_rows
 
 
-    # -----------------------------------------------------
-    # NORMALIZATION FUNCTION
-    # -----------------------------------------------------
+# ---------------------------------------------------------
+# STEP 3 — DATA CHECK
+# ---------------------------------------------------------
 
-    def z_score(values):
+st.divider()
+st.header("Step 3 — Data check")
 
-        mean_value = np.mean(values)
-        sd_value = np.std(values, ddof=1)
+check1, check2, check3 = st.columns(3)
 
-        if sd_value == 0 or np.isnan(sd_value):
-            return np.zeros(len(values))
+with check1:
+    st.metric("Total rows", total_rows)
 
-        return (values - mean_value) / sd_value
+with check2:
+    st.metric("Usable rows", usable_rows)
+
+with check3:
+    st.metric("Rows removed", missing_rows)
+
+if usable_rows < 6:
+    st.error(
+        "There are fewer than 6 usable rows. "
+        "At least one 6-second window is required."
+    )
+    st.stop()
+
+if missing_rows == 0:
+    st.success("Data check passed — no missing values were detected.")
+else:
+    st.warning(
+        f"{missing_rows} row(s) were removed because of missing or "
+        "non-numeric values."
+    )
+
+st.write(
+    "**Analysis settings:** 6-second windows with 3-second overlap."
+)
 
 
-    # -----------------------------------------------------
-    # 6-SECOND WINDOW CORRELATION
-    # 3-SECOND OVERLAP
-    # -----------------------------------------------------
+# ---------------------------------------------------------
+# HELPER FUNCTION
+# ---------------------------------------------------------
 
-    def calculate_window_correlations(data, variable):
+def z_score(values):
+    values = np.asarray(values, dtype=float)
 
-        window_length = 6
-        step = 3
+    std = np.std(values, ddof=1)
 
-        results = []
+    if std == 0 or np.isnan(std):
+        return np.full(len(values), np.nan)
 
-        start = 0
+    return (values - np.mean(values)) / std
 
-        while start + window_length <= len(data):
 
-            window = data.iloc[
-                start:start + window_length
-            ].copy()
+# ---------------------------------------------------------
+# COUPLING ANALYSIS FUNCTION
+# ---------------------------------------------------------
 
-            hr_values = window["HR"].values
-            variable_values = window[variable].values
+def calculate_coupling(df, variable):
 
-            # Normalize separately within each 6-second window
-            hr_z = z_score(hr_values)
-            variable_z = z_score(variable_values)
+    results = []
 
-            # Pearson correlation
+    window_length = 6
+    step = 3
+
+    max_start = len(df) - window_length
+
+    for start in range(0, max_start + 1, step):
+
+        window = df.iloc[
+            start:start + window_length
+        ]
+
+        hr_values = z_score(window["HR"].values)
+        variable_values = z_score(window[variable].values)
+
+        if (
+            np.any(np.isnan(hr_values))
+            or np.any(np.isnan(variable_values))
+        ):
+            correlation = np.nan
+        else:
             correlation = np.corrcoef(
-                hr_z,
-                variable_z
+                hr_values,
+                variable_values
             )[0, 1]
 
-            results.append(
-                {
-                    "Start_Time": window["Time"].iloc[0],
-                    "End_Time": window["Time"].iloc[-1],
-                    "Mid_Time": np.mean(window["Time"]),
-                    "Variable": variable,
-                    "Correlation": correlation
-                }
-            )
+        results.append({
+            "Variable": variable,
+            "Window start (s)": window["Time"].iloc[0],
+            "Window end (s)": window["Time"].iloc[-1],
+            "Coupling": correlation
+        })
 
-            start += step
-
-        return pd.DataFrame(results)
+    return pd.DataFrame(results)
 
 
-    # -----------------------------------------------------
-    # RUN ANALYSIS
-    # -----------------------------------------------------
+# ---------------------------------------------------------
+# STEP 4 — RUN ANALYSIS
+# ---------------------------------------------------------
 
-    if st.button("Run coupling analysis"):
+st.divider()
+st.header("Step 4 — Run coupling analysis")
+
+st.write(
+    "The program will calculate short-timescale Pearson correlations "
+    "between HR and each physiological variable."
+)
+
+run_analysis = st.button(
+    "▶ Run coupling analysis",
+    type="primary",
+    use_container_width=True
+)
+
+
+if run_analysis:
+
+    with st.spinner("Running coupling analysis..."):
 
         variables = ["RR", "SmO2", "THb"]
 
@@ -215,283 +257,279 @@ if uploaded_file is not None:
 
         for variable in variables:
 
-            result = calculate_window_correlations(
-                analysis_df,
+            result = calculate_coupling(
+                analysis_data,
                 variable
             )
 
             all_results.append(result)
 
-        results_df = pd.concat(
+        results = pd.concat(
             all_results,
             ignore_index=True
         )
 
-
         # -------------------------------------------------
-        # FIRST THIRD VS LAST THIRD
+        # FIRST THIRD / LAST THIRD
         # -------------------------------------------------
 
-        total_windows = len(
-            results_df[
-                results_df["Variable"] == "RR"
-            ]
-        )
-
-        first_third_end = total_windows // 3
-
-        last_third_start = (
-            total_windows - total_windows // 3
-        )
-
-        results_df["Segment"] = "Middle"
+        results["Third"] = ""
 
         for variable in variables:
 
-            variable_indices = results_df.index[
-                results_df["Variable"] == variable
+            variable_mask = (
+                results["Variable"] == variable
+            )
+
+            variable_indices = results.index[
+                variable_mask
             ]
 
-            results_df.loc[
-                variable_indices[:first_third_end],
-                "Segment"
-            ] = "Beginning"
+            n = len(variable_indices)
 
-            results_df.loc[
-                variable_indices[last_third_start:],
-                "Segment"
-            ] = "End"
+            third_size = n // 3
 
+            if third_size > 0:
 
-        # -------------------------------------------------
-        # DISPLAY WINDOW RESULTS
-        # -------------------------------------------------
-
-        st.subheader(
-            "6-second window coupling results"
-        )
-
-        st.write(
-            """
-            Each correlation represents the relationship between
-            HR and the selected physiological variable within one
-            6-second window. Windows overlap by 3 seconds.
-            """
-        )
-
-        st.dataframe(results_df)
-
-
-        # -------------------------------------------------
-        # SUMMARY OF BEGINNING VS END
-        # -------------------------------------------------
-
-        st.subheader(
-            "Beginning vs. End coupling"
-        )
-
-        summary = (
-            results_df[
-                results_df["Segment"].isin(
-                    ["Beginning", "End"]
-                )
-            ]
-            .groupby(
-                ["Variable", "Segment"]
-            )["Correlation"]
-            .agg(
-                [
-                    "mean",
-                    "median",
-                    "std",
-                    "count"
+                first_indices = variable_indices[
+                    :third_size
                 ]
-            )
-            .reset_index()
+
+                last_indices = variable_indices[
+                    -third_size:
+                ]
+
+                results.loc[
+                    first_indices,
+                    "Third"
+                ] = "First third"
+
+                results.loc[
+                    last_indices,
+                    "Third"
+                ] = "Last third"
+
+
+    # -----------------------------------------------------
+    # RESULTS
+    # -----------------------------------------------------
+
+    st.divider()
+    st.header("Results")
+
+    # -----------------------------------------------------
+    # ANALYSIS SETTINGS
+    # -----------------------------------------------------
+
+    st.subheader("Analysis settings")
+
+    settings_col1, settings_col2, settings_col3 = st.columns(3)
+
+    with settings_col1:
+        st.metric("Window length", "6 s")
+
+    with settings_col2:
+        st.metric("Window overlap", "3 s")
+
+    with settings_col3:
+        st.metric(
+            "Coupling pairs",
+            "3"
         )
 
-        st.dataframe(summary)
+    st.write(
+        "Coupling pairs: HR–RR, HR–SmO₂, and HR–THb."
+    )
 
 
-        # -------------------------------------------------
-        # POSITIVE / NEGATIVE COUPLING
-        # -------------------------------------------------
+    # -----------------------------------------------------
+    # SUMMARY TABLE
+    # -----------------------------------------------------
 
-        st.subheader(
-            "Positive and negative coupling"
+    st.subheader("First third vs. last third")
+
+    summary = (
+        results[
+            results["Third"].isin(
+                ["First third", "Last third"]
+            )
+        ]
+        .groupby(
+            ["Variable", "Third"]
+        )["Coupling"]
+        .agg(
+            Mean="mean",
+            Median="median",
+            SD="std",
+            N="count"
+        )
+        .reset_index()
+    )
+
+    st.dataframe(
+        summary.round(3),
+        use_container_width=True
+    )
+
+
+    # -----------------------------------------------------
+    # POSITIVE / NEGATIVE COUPLING
+    # -----------------------------------------------------
+
+    st.subheader("Positive and negative coupling")
+
+    distribution_summary = []
+
+    for variable in variables:
+
+        values = results.loc[
+            results["Variable"] == variable,
+            "Coupling"
+        ].dropna()
+
+        if len(values) > 0:
+
+            positive = (
+                np.sum(values > 0) /
+                len(values) *
+                100
+            )
+
+            negative = (
+                np.sum(values < 0) /
+                len(values) *
+                100
+            )
+
+            distribution_summary.append({
+                "Variable": variable,
+                "Positive coupling (%)": positive,
+                "Negative coupling (%)": negative
+            })
+
+    distribution_table = pd.DataFrame(
+        distribution_summary
+    )
+
+    st.dataframe(
+        distribution_table.round(1),
+        use_container_width=True
+    )
+
+
+    # -----------------------------------------------------
+    # COUPLING OVER TIME
+    # -----------------------------------------------------
+
+    st.subheader("Coupling over time")
+
+    for variable in variables:
+
+        variable_results = results[
+            results["Variable"] == variable
+        ]
+
+        fig, ax = plt.subplots()
+
+        ax.plot(
+            variable_results["Window start (s)"],
+            variable_results["Coupling"],
+            marker="o"
         )
 
-        coupling_summary = []
-
-        for variable in variables:
-
-            variable_data = results_df[
-                results_df["Variable"] == variable
-            ]
-
-            for segment in ["Beginning", "End"]:
-
-                segment_data = variable_data[
-                    variable_data["Segment"] == segment
-                ]["Correlation"].dropna()
-
-                if len(segment_data) > 0:
-
-                    positive = np.sum(
-                        segment_data > 0
-                    ) / len(segment_data)
-
-                    negative = np.sum(
-                        segment_data < 0
-                    ) / len(segment_data)
-
-                else:
-                    positive = np.nan
-                    negative = np.nan
-
-                coupling_summary.append(
-                    {
-                        "Variable": variable,
-                        "Segment": segment,
-                        "Positive_Coupling": positive,
-                        "Negative_Coupling": negative
-                    }
-                )
-
-        coupling_df = pd.DataFrame(
-            coupling_summary
+        ax.axhline(
+            0,
+            linestyle="--"
         )
 
-        st.dataframe(coupling_df)
-
-
-        # -------------------------------------------------
-        # CORRELATION DISTRIBUTION
-        # -------------------------------------------------
-
-        st.subheader(
-            "Distribution of coupling values"
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Pearson correlation")
+        ax.set_title(
+            f"HR–{variable} coupling over time"
         )
 
-        for variable in variables:
+        ax.set_ylim(-1, 1)
 
-            fig, ax = plt.subplots()
+        st.pyplot(fig)
 
-            variable_data = results_df[
-                results_df["Variable"] == variable
-            ]["Correlation"].dropna()
-
-            ax.hist(
-                variable_data,
-                bins=np.arange(
-                    -1,
-                    1.05,
-                    0.05
-                )
-            )
-
-            ax.axvline(
-                0,
-                linestyle="--"
-            )
-
-            ax.set_xlabel(
-                "Pearson correlation coefficient"
-            )
-
-            ax.set_ylabel(
-                "Number of 6-second windows"
-            )
-
-            ax.set_title(
-                f"HR–{variable} Coupling Distribution"
-            )
-
-            st.pyplot(fig)
-
-            plt.close(fig)
+        plt.close(fig)
 
 
-        # -------------------------------------------------
-        # TIME-RESOLVED COUPLING
-        # -------------------------------------------------
+    # -----------------------------------------------------
+    # COUPLING DISTRIBUTIONS
+    # -----------------------------------------------------
 
-        st.subheader(
-            "Coupling over time"
+    st.subheader("Coupling distributions")
+
+    for variable in variables:
+
+        values = results.loc[
+            results["Variable"] == variable,
+            "Coupling"
+        ].dropna()
+
+        fig, ax = plt.subplots()
+
+        bins = np.arange(
+            -1,
+            1.05,
+            0.05
         )
 
-        for variable in variables:
-
-            variable_data = results_df[
-                results_df["Variable"] == variable
-            ]
-
-            fig, ax = plt.subplots()
-
-            ax.plot(
-                variable_data["Mid_Time"],
-                variable_data["Correlation"]
-            )
-
-            ax.axhline(
-                0,
-                linestyle="--"
-            )
-
-            ax.set_xlabel(
-                "Time"
-            )
-
-            ax.set_ylabel(
-                "Pearson correlation"
-            )
-
-            ax.set_title(
-                f"HR–{variable} Coupling Over Time"
-            )
-
-            st.pyplot(fig)
-
-            plt.close(fig)
-
-
-        # -------------------------------------------------
-        # DOWNLOAD RESULTS
-        # -------------------------------------------------
-
-        st.subheader(
-            "Download results"
+        ax.hist(
+            values,
+            bins=bins
         )
 
-        csv = results_df.to_csv(
-            index=False
-        ).encode("utf-8")
-
-        st.download_button(
-            label="Download window correlation results",
-            data=csv,
-            file_name="squat_coupling_results.csv",
-            mime="text/csv"
+        ax.set_xlabel(
+            "Pearson correlation"
         )
 
-        summary_csv = summary.to_csv(
-            index=False
-        ).encode("utf-8")
-
-        st.download_button(
-            label="Download beginning vs end summary",
-            data=summary_csv,
-            file_name="beginning_vs_end_summary.csv",
-            mime="text/csv"
+        ax.set_ylabel(
+            "Number of windows"
         )
 
-        coupling_csv = coupling_df.to_csv(
-            index=False
-        ).encode("utf-8")
-
-        st.download_button(
-            label="Download positive negative coupling results",
-            data=coupling_csv,
-            file_name="positive_negative_coupling.csv",
-            mime="text/csv"
+        ax.set_title(
+            f"Distribution of HR–{variable} coupling"
         )
+
+        ax.set_xlim(-1, 1)
+
+        st.pyplot(fig)
+
+        plt.close(fig)
+
+
+    # -----------------------------------------------------
+    # DOWNLOAD RESULTS
+    # -----------------------------------------------------
+
+    st.subheader("Download results")
+
+    csv_data = results.to_csv(
+        index=False
+    ).encode("utf-8")
+
+    st.download_button(
+        label="Download window-by-window results",
+        data=csv_data,
+        file_name="squat_coupling_window_results.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
+    summary_csv = summary.to_csv(
+        index=False
+    ).encode("utf-8")
+
+    st.download_button(
+        label="Download summary results",
+        data=summary_csv,
+        file_name="squat_coupling_summary.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
+    st.success(
+        "Coupling analysis completed successfully."
+    )
