@@ -24,12 +24,10 @@ st.markdown(
     """
     <style>
 
-    /* Main page */
     .main {
         padding-top: 1rem;
     }
 
-    /* Header */
     .main-header {
         padding: 1.2rem 0 0.5rem 0;
     }
@@ -44,7 +42,6 @@ st.markdown(
         color: #666;
     }
 
-    /* Section cards */
     .section-card {
         padding: 1.2rem 1.4rem;
         border-radius: 12px;
@@ -64,7 +61,6 @@ st.markdown(
         font-size: 0.92rem;
     }
 
-    /* Step badges */
     .step-badge {
         display: inline-block;
         padding: 0.25rem 0.65rem;
@@ -74,7 +70,6 @@ st.markdown(
         margin-bottom: 0.5rem;
     }
 
-    /* Metrics */
     [data-testid="stMetric"] {
         background-color: #fafafa;
         border: 1px solid #e5e5e5;
@@ -82,28 +77,23 @@ st.markdown(
         border-radius: 10px;
     }
 
-    /* Sidebar */
     section[data-testid="stSidebar"] {
         border-right: 1px solid #e5e5e5;
     }
 
-    /* Buttons */
     .stButton > button {
         border-radius: 8px;
         font-weight: 600;
     }
 
-    /* Download buttons */
     .stDownloadButton > button {
         border-radius: 8px;
     }
 
-    /* Tables */
     [data-testid="stDataFrame"] {
         border-radius: 8px;
     }
 
-    /* Divider */
     hr {
         margin: 1.5rem 0;
     }
@@ -149,14 +139,17 @@ with st.sidebar:
 
     st.markdown("### Analysis settings")
 
+    st.write("**Analysis sampling rate**")
+    st.write("1 Hz")
+
     st.write("**Window length**")
     st.write("6 seconds")
 
-    st.write("**Window overlap**")
+    st.write("**Window step**")
     st.write("3 seconds")
 
-    st.write("**Sampling interval**")
-    st.write("1 second")
+    st.write("**Window overlap**")
+    st.write("50%")
 
     st.write("**Coupling method**")
     st.write("Pearson correlation")
@@ -173,8 +166,8 @@ with st.sidebar:
     st.divider()
 
     st.caption(
-        "The analysis adapts the short-timescale windowing approach "
-        "described by Garcia-Retortillo et al."
+        "Signals are converted to a common 1 Hz analysis grid before "
+        "short-timescale coupling is calculated."
     )
 
 
@@ -185,16 +178,22 @@ with st.sidebar:
 with st.expander("About this analysis", expanded=False):
 
     st.write(
-        "This program analyzes synchronized 1-second physiological "
-        "data using short-timescale coupling analysis. It uses "
-        "6-second windows with 3-second overlap, adapting the "
-        "time-window approach described by Garcia-Retortillo et al."
+        "This program analyzes synchronized physiological data using "
+        "short-timescale coupling analysis. Signals can have different "
+        "native sampling rates and are converted to a common 1 Hz "
+        "analysis grid before coupling is calculated."
+    )
+
+    st.write(
+        "For example, a 2000 Hz signal is summarized within each "
+        "1-second interval so that it can be compared with signals "
+        "sampled at approximately 1 Hz."
     )
 
     st.info(
         "The original study examined heart rate and EMG. "
-        "This program adapts the approach to examine HR–RR, "
-        "HR–SmO₂, and HR–THb coupling."
+        "This program adapts the short-timescale approach to examine "
+        "HR–RR, HR–SmO₂, and HR–THb coupling."
     )
 
 
@@ -212,7 +211,7 @@ st.markdown(
         <div class="section-title">Upload your data</div>
         <div class="section-description">
             Upload the Excel file containing your synchronized
-            1-second physiological data.
+            physiological data.
         </div>
     </div>
     """,
@@ -256,7 +255,9 @@ st.success(
 )
 
 
-# File information
+# =========================================================
+# FILE INFORMATION
+# =========================================================
 
 col1, col2, col3 = st.columns(3)
 
@@ -356,6 +357,80 @@ with col2:
 
 
 # =========================================================
+# SIGNAL SAMPLING RATES
+# =========================================================
+
+st.markdown("### Native sampling rates")
+
+st.write(
+    "Enter the native sampling rate of each signal. "
+    "These rates are used to convert all signals to the "
+    "common 1 Hz analysis grid."
+)
+
+
+rate_options = [
+    1,
+    2,
+    5,
+    10,
+    20,
+    50,
+    100,
+    200,
+    500,
+    1000,
+    2000
+]
+
+
+col1, col2, col3, col4 = st.columns(4)
+
+
+with col1:
+
+    hr_rate = st.selectbox(
+        "HR sampling rate (Hz)",
+        rate_options,
+        index=0
+    )
+
+
+with col2:
+
+    rr_rate = st.selectbox(
+        "RR sampling rate (Hz)",
+        rate_options,
+        index=0
+    )
+
+
+with col3:
+
+    smo2_rate = st.selectbox(
+        "SmO₂ sampling rate (Hz)",
+        rate_options,
+        index=0
+    )
+
+
+with col4:
+
+    thb_rate = st.selectbox(
+        "THb sampling rate (Hz)",
+        rate_options,
+        index=0
+    )
+
+
+st.info(
+    "For your data, enter 2000 Hz for the signal sampled at 2000 Hz "
+    "and 1 Hz for the signal sampled at 1 Hz. The other signals should "
+    "be set according to their actual native sampling rates."
+)
+
+
+# =========================================================
 # DATA PREPARATION
 # =========================================================
 
@@ -379,6 +454,8 @@ analysis_data.columns = [
 ]
 
 
+# Convert everything to numeric
+
 for column in analysis_data.columns:
 
     analysis_data[column] = pd.to_numeric(
@@ -387,8 +464,19 @@ for column in analysis_data.columns:
     )
 
 
-total_rows = len(
-    analysis_data
+# Remove rows where time itself is missing
+
+analysis_data = analysis_data[
+    analysis_data["Time"].notna()
+].copy()
+
+
+# Sort chronologically
+
+analysis_data = analysis_data.sort_values(
+    "Time"
+).reset_index(
+    drop=True
 )
 
 
@@ -404,8 +492,8 @@ st.markdown(
         <div class="step-badge">STEP 3</div>
         <div class="section-title">Check your data</div>
         <div class="section-description">
-            The program checks for missing values and confirms
-            that the data are approximately 1 second apart.
+            The program checks the time column, missing values,
+            and the native sampling structure of your data.
         </div>
     </div>
     """,
@@ -413,8 +501,22 @@ st.markdown(
 )
 
 
+total_rows = len(
+    analysis_data
+)
+
+
 missing_counts = (
-    analysis_data.isna().sum()
+    analysis_data[
+        [
+            "HR",
+            "RR",
+            "SmO2",
+            "THb"
+        ]
+    ]
+    .isna()
+    .sum()
 )
 
 
@@ -445,8 +547,8 @@ with col2:
 with col3:
 
     st.metric(
-        "Expected sampling",
-        "1 s"
+        "Analysis sampling",
+        "1 Hz"
     )
 
 
@@ -456,8 +558,10 @@ with col3:
 
 if total_missing > 0:
 
-    st.error(
-        "⚠ Missing or non-numeric values were detected."
+    st.warning(
+        "⚠ Missing or non-numeric values were detected. "
+        "The analysis will continue. Missing observations will "
+        "not be automatically deleted or interpolated."
     )
 
     st.write(
@@ -473,17 +577,10 @@ if total_missing > 0:
         use_container_width=True
     )
 
-    st.info(
-        "Rows are not automatically deleted because removing "
-        "rows could disrupt the time alignment between signals."
-    )
-
-    st.stop()
-
 else:
 
     st.success(
-        "✓ No missing or non-numeric values detected."
+        "✓ No missing or non-numeric signal values detected."
     )
 
 
@@ -506,21 +603,22 @@ if len(time_values) > 1:
         time_differences
     )
 
-    irregular_intervals = np.sum(
-        ~np.isclose(
-            time_differences,
-            1.0,
-            atol=0.01
-        )
+    min_difference = np.min(
+        time_differences
+    )
+
+    max_difference = np.max(
+        time_differences
     )
 
 else:
 
     median_difference = np.nan
-    irregular_intervals = 0
+    min_difference = np.nan
+    max_difference = np.nan
 
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 
 with col1:
@@ -531,83 +629,294 @@ with col1:
 
         st.metric(
             "Median time interval",
-            f"{median_difference:.3f} s"
+            f"{median_difference:.6f} s"
         )
 
 
 with col2:
 
-    st.metric(
-        "Irregular intervals",
-        int(irregular_intervals)
-    )
+    if not np.isnan(
+        min_difference
+    ):
+
+        st.metric(
+            "Minimum interval",
+            f"{min_difference:.6f} s"
+        )
 
 
-if (
-    not np.isnan(median_difference)
-    and
-    irregular_intervals == 0
+with col3:
+
+    if not np.isnan(
+        max_difference
+    ):
+
+        st.metric(
+            "Maximum interval",
+            f"{max_difference:.6f} s"
+        )
+
+
+if len(time_values) > 1:
+
+    if (
+        np.all(
+            np.diff(time_values) > 0
+        )
+    ):
+
+        st.success(
+            "✓ Time values are strictly increasing."
+        )
+
+    else:
+
+        st.error(
+            "Time values are not strictly increasing. "
+            "Please check your time column."
+        )
+
+        st.stop()
+
+
+# =========================================================
+# STEP 4 — CONVERT TO 1 Hz
+# =========================================================
+
+st.divider()
+
+st.markdown(
+    """
+    <div class="section-card">
+        <div class="step-badge">STEP 4</div>
+        <div class="section-title">Convert signals to a common time base</div>
+        <div class="section-description">
+            Signals with different native sampling rates are converted
+            to a common 1 Hz analysis grid before coupling is calculated.
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+st.write(
+    "The 2000 Hz signal is summarized within each 1-second interval. "
+    "Signals already sampled at 1 Hz are retained on the 1-second grid."
+)
+
+
+# ---------------------------------------------------------
+# Function to convert a signal to 1 Hz
+# ---------------------------------------------------------
+
+def convert_to_1hz(
+    df,
+    signal,
+    native_rate
 ):
 
-    st.success(
-        "✓ Time alignment check passed — all intervals are "
-        "approximately 1 second."
+    temp = df[
+        [
+            "Time",
+            signal
+        ]
+    ].copy()
+
+    temp = temp.dropna(
+        subset=["Time"]
     )
 
-elif irregular_intervals > 0:
-
-    st.warning(
-        f"⚠ {irregular_intervals} time intervals are not "
-        "approximately 1 second. Check the synchronization "
-        "before continuing."
+    temp = temp.sort_values(
+        "Time"
     )
 
-else:
+    # Create 1-second bins.
+    #
+    # The floor operation means:
+    #
+    # 0.000 - 0.999 -> second 0
+    # 1.000 - 1.999 -> second 1
+    # 2.000 - 2.999 -> second 2
+    #
+    # This is appropriate for converting high-frequency data
+    # into one value per second.
 
-    st.warning(
-        "Time spacing could not be checked."
+    temp["AnalysisTime"] = np.floor(
+        temp["Time"]
+    ).astype(int)
+
+
+    # Aggregate within each 1-second interval.
+    #
+    # mean() automatically ignores NA values.
+    #
+    # If every value in the second is NA,
+    # the resulting value remains NA.
+
+    result = (
+        temp
+        .groupby(
+            "AnalysisTime"
+        )[signal]
+        .mean()
+        .reset_index()
     )
+
+
+    result = result.rename(
+        columns={
+            "AnalysisTime": "Time"
+        }
+    )
+
+
+    return result
 
 
 # ---------------------------------------------------------
-# Minimum data
+# Convert each signal
 # ---------------------------------------------------------
 
-if total_rows < 6:
+hr_1hz = convert_to_1hz(
+    analysis_data,
+    "HR",
+    hr_rate
+)
+
+
+rr_1hz = convert_to_1hz(
+    analysis_data,
+    "RR",
+    rr_rate
+)
+
+
+smo2_1hz = convert_to_1hz(
+    analysis_data,
+    "SmO2",
+    smo2_rate
+)
+
+
+thb_1hz = convert_to_1hz(
+    analysis_data,
+    "THb",
+    thb_rate
+)
+
+
+# ---------------------------------------------------------
+# Merge signals onto common 1 Hz grid
+# ---------------------------------------------------------
+
+signals_1hz = pd.merge(
+    hr_1hz,
+    rr_1hz,
+    on="Time",
+    how="outer"
+)
+
+
+signals_1hz = pd.merge(
+    signals_1hz,
+    smo2_1hz,
+    on="Time",
+    how="outer"
+)
+
+
+signals_1hz = pd.merge(
+    signals_1hz,
+    thb_1hz,
+    on="Time",
+    how="outer"
+)
+
+
+signals_1hz = signals_1hz.sort_values(
+    "Time"
+).reset_index(
+    drop=True
+)
+
+
+# ---------------------------------------------------------
+# Display converted data
+# ---------------------------------------------------------
+
+st.success(
+    "✓ Signals converted to the common 1 Hz analysis grid."
+)
+
+
+col1, col2, col3, col4 = st.columns(4)
+
+
+with col1:
+
+    st.metric(
+        "HR rate",
+        f"{hr_rate} Hz"
+    )
+
+
+with col2:
+
+    st.metric(
+        "RR rate",
+        f"{rr_rate} Hz"
+    )
+
+
+with col3:
+
+    st.metric(
+        "SmO₂ rate",
+        f"{smo2_rate} Hz"
+    )
+
+
+with col4:
+
+    st.metric(
+        "THb rate",
+        f"{thb_rate} Hz"
+    )
+
+
+with st.expander(
+    "Preview 1 Hz analysis data"
+):
+
+    st.dataframe(
+        signals_1hz.head(20),
+        use_container_width=True
+    )
+
+
+# =========================================================
+# ANALYSIS PARAMETERS
+# =========================================================
+
+window_seconds = 6
+step_seconds = 3
+
+minimum_valid_observations = 4
+
+
+# =========================================================
+# CHECK MINIMUM DATA
+# =========================================================
+
+if len(signals_1hz) < window_seconds:
 
     st.error(
-        "At least 6 seconds of data are required."
+        f"At least {window_seconds} seconds of 1 Hz data "
+        "are required for the analysis."
     )
 
     st.stop()
-
-
-# =========================================================
-# HELPER FUNCTION
-# =========================================================
-
-def z_score(values):
-
-    values = np.asarray(
-        values,
-        dtype=float
-    )
-
-    std = np.std(
-        values,
-        ddof=1
-    )
-
-    if std == 0 or np.isnan(std):
-
-        return np.full(
-            len(values),
-            np.nan
-        )
-
-    return (
-        values - np.mean(values)
-    ) / std
 
 
 # =========================================================
@@ -616,13 +925,30 @@ def z_score(values):
 
 def calculate_coupling(
     df,
-    variable
+    variable,
+    window_seconds=6,
+    step_seconds=3,
+    minimum_valid_observations=4
 ):
 
     results = []
 
-    window_length = 6
-    step = 3
+
+    # -----------------------------------------------------
+    # Because the data are now on a 1 Hz grid:
+    #
+    # 6 rows = 6 seconds
+    # 3 rows = 3 seconds
+    # -----------------------------------------------------
+
+    window_length = int(
+        window_seconds
+    )
+
+    step = int(
+        step_seconds
+    )
+
 
     max_start = (
         len(df)
@@ -636,38 +962,78 @@ def calculate_coupling(
         step
     ):
 
+
         window = df.iloc[
             start:start + window_length
-        ]
+        ].copy()
 
 
-        hr_values = z_score(
-            window["HR"].values
+        # -------------------------------------------------
+        # Pairwise deletion
+        #
+        # Only retain observations where BOTH HR and the
+        # target physiological variable are available.
+        # -------------------------------------------------
+
+        valid = window[
+            [
+                "HR",
+                variable
+            ]
+        ].dropna()
+
+
+        n_valid = len(
+            valid
         )
 
-        variable_values = z_score(
-            window[variable].values
-        )
 
+        # -------------------------------------------------
+        # Calculate Pearson correlation
+        # -------------------------------------------------
 
-        if (
-            np.any(
-                np.isnan(hr_values)
+        if n_valid >= minimum_valid_observations:
+
+            hr_values = valid[
+                "HR"
+            ].to_numpy(
+                dtype=float
             )
-            or
-            np.any(
-                np.isnan(variable_values)
-            )
-        ):
 
-            correlation = np.nan
+
+            variable_values = valid[
+                variable
+            ].to_numpy(
+                dtype=float
+            )
+
+
+            # Check for zero variance
+
+            if (
+                np.std(
+                    hr_values,
+                    ddof=1
+                ) == 0
+                or
+                np.std(
+                    variable_values,
+                    ddof=1
+                ) == 0
+            ):
+
+                correlation = np.nan
+
+            else:
+
+                correlation = np.corrcoef(
+                    hr_values,
+                    variable_values
+                )[0, 1]
 
         else:
 
-            correlation = np.corrcoef(
-                hr_values,
-                variable_values
-            )[0, 1]
+            correlation = np.nan
 
 
         results.append({
@@ -681,8 +1047,15 @@ def calculate_coupling(
             "Window end (s)":
                 window["Time"].iloc[-1],
 
+            "N valid":
+                n_valid,
+
+            "N missing":
+                window_seconds - n_valid,
+
             "Coupling":
                 correlation
+
         })
 
 
@@ -692,7 +1065,7 @@ def calculate_coupling(
 
 
 # =========================================================
-# STEP 4 — RUN ANALYSIS
+# STEP 5 — RUN ANALYSIS
 # =========================================================
 
 st.divider()
@@ -700,7 +1073,7 @@ st.divider()
 st.markdown(
     """
     <div class="section-card">
-        <div class="step-badge">STEP 4</div>
+        <div class="step-badge">STEP 5</div>
         <div class="section-title">Run coupling analysis</div>
         <div class="section-description">
             Calculate short-timescale Pearson correlations
@@ -709,6 +1082,14 @@ st.markdown(
     </div>
     """,
     unsafe_allow_html=True
+)
+
+
+st.write(
+    f"Each correlation uses a {window_seconds}-second window "
+    f"with a {step_seconds}-second step. A minimum of "
+    f"{minimum_valid_observations} paired observations is required "
+    "to calculate a correlation."
 )
 
 
@@ -740,9 +1121,13 @@ if run_analysis:
         for variable in variables:
 
             result = calculate_coupling(
-                analysis_data,
-                variable
+                signals_1hz,
+                variable,
+                window_seconds,
+                step_seconds,
+                minimum_valid_observations
             )
+
 
             all_results.append(
                 result
@@ -820,6 +1205,7 @@ if run_analysis:
 
     st.header("Analysis results")
 
+
     st.success(
         "✓ Coupling analysis completed successfully."
     )
@@ -837,22 +1223,36 @@ if run_analysis:
     )
 
 
-    col1, col2, col3, col4 = st.columns(4)
+    valid_correlations = (
+        results[
+            "Coupling"
+        ]
+        .notna()
+        .sum()
+    )
+
+
+    total_correlations = len(
+        results
+    )
+
+
+    col1, col2, col3, col4, col5 = st.columns(5)
 
 
     with col1:
 
         st.metric(
             "Window length",
-            "6 s"
+            f"{window_seconds} s"
         )
 
 
     with col2:
 
         st.metric(
-            "Overlap",
-            "3 s"
+            "Step",
+            f"{step_seconds} s"
         )
 
 
@@ -869,6 +1269,35 @@ if run_analysis:
         st.metric(
             "Windows",
             number_of_windows
+        )
+
+
+    with col5:
+
+        st.metric(
+            "Valid correlations",
+            f"{valid_correlations}/{total_correlations}"
+        )
+
+
+    # =====================================================
+    # MISSING DATA IN COUPLING
+    # =====================================================
+
+    missing_coupling = (
+        results["Coupling"]
+        .isna()
+        .sum()
+    )
+
+
+    if missing_coupling > 0:
+
+        st.warning(
+            f"{missing_coupling} window-level correlations "
+            "could not be calculated because there were fewer "
+            f"than {minimum_valid_observations} valid paired "
+            "observations or one signal had zero variance."
         )
 
 
@@ -896,9 +1325,11 @@ if run_analysis:
             "Coupling over time"
         )
 
+
         st.caption(
             "Each point represents the Pearson correlation "
-            "calculated within a 6-second window."
+            f"calculated within a {window_seconds}-second window. "
+            "Correlations are based only on valid paired observations."
         )
 
 
@@ -938,18 +1369,22 @@ if run_analysis:
                 "Time (s)"
             )
 
+
             ax.set_ylabel(
                 "Pearson correlation"
             )
+
 
             ax.set_title(
                 f"HR–{variable} coupling"
             )
 
+
             ax.set_ylim(
                 -1,
                 1
             )
+
 
             ax.grid(
                 alpha=0.2
@@ -1053,9 +1488,11 @@ if run_analysis:
                     first_values.mean()
                 )
 
+
                 last_mean = (
                     last_values.mean()
                 )
+
 
                 difference = (
                     last_mean
@@ -1076,6 +1513,7 @@ if run_analysis:
 
                     "Change (last - first)":
                         difference
+
                 })
 
 
@@ -1089,6 +1527,10 @@ if run_analysis:
             use_container_width=True
         )
 
+
+        # -------------------------------------------------
+        # Positive and negative coupling
+        # -------------------------------------------------
 
         st.subheader(
             "Positive and negative coupling"
@@ -1157,6 +1599,7 @@ if run_analysis:
 
                         "Number of windows":
                             len(values)
+
                     })
 
 
@@ -1184,7 +1627,7 @@ if run_analysis:
 
         st.caption(
             "Distribution of correlation coefficients across "
-            "the 6-second windows."
+            f"the {window_seconds}-second windows."
         )
 
 
@@ -1233,18 +1676,22 @@ if run_analysis:
                 "Pearson correlation"
             )
 
+
             ax.set_ylabel(
                 "Number of windows"
             )
+
 
             ax.set_title(
                 f"HR–{variable} coupling distribution"
             )
 
+
             ax.set_xlim(
                 -1,
                 1
             )
+
 
             ax.grid(
                 alpha=0.2
@@ -1307,6 +1754,7 @@ if run_analysis:
             "text/csv",
 
             use_container_width=True
+
         )
 
 
@@ -1340,6 +1788,7 @@ if run_analysis:
             "text/csv",
 
             use_container_width=True
+
         )
 
 
@@ -1373,6 +1822,41 @@ if run_analysis:
             "text/csv",
 
             use_container_width=True
+
+        )
+
+
+        # -------------------------------------------------
+        # 1 Hz processed data
+        # -------------------------------------------------
+
+        processed_csv = (
+            signals_1hz
+            .to_csv(
+                index=False
+            )
+            .encode(
+                "utf-8"
+            )
+        )
+
+
+        st.download_button(
+
+            label=
+            "⬇ Download 1 Hz processed data",
+
+            data=
+            processed_csv,
+
+            file_name=
+            "squat_coupling_1hz_processed_data.csv",
+
+            mime=
+            "text/csv",
+
+            use_container_width=True
+
         )
 
 
@@ -1382,9 +1866,13 @@ if run_analysis:
 
     st.divider()
 
+
     st.info(
-        "Each coupling coefficient is calculated from six "
-        "1-second observations within a 6-second window. "
-        "Because windows overlap by 3 seconds, neighboring "
+        f"Each coupling coefficient is calculated from up to "
+        f"{window_seconds} one-second observations within a "
+        f"{window_seconds}-second window. Missing observations "
+        "are excluded only from the specific HR–signal pair being "
+        "correlated. Windows overlap by "
+        f"{window_seconds - step_seconds} seconds, so neighboring "
         "coupling coefficients are not independent observations."
     )
